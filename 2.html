@@ -1,0 +1,1355 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Disaster Management System - Local Version</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+        body {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        html, body {
+            height: 100%;
+        }
+        
+        @keyframes pulse-alert {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.95; transform: scale(0.998); }
+        }
+        
+        @keyframes slide-in-right {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes gradient-shift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .alert-pulse {
+            animation: pulse-alert 3s ease-in-out infinite;
+        }
+        
+        .notification-enter {
+            animation: slide-in-right 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        
+        .fade-in {
+            animation: fade-in 0.5s ease-out forwards;
+        }
+        
+        .severity-critical { 
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 50%, #7f1d1d 100%);
+            box-shadow: 0 4px 20px rgba(220, 38, 38, 0.4);
+        }
+        
+        .severity-high { 
+            background: linear-gradient(135deg, #ea580c 0%, #c2410c 50%, #9a3412 100%);
+            box-shadow: 0 4px 20px rgba(234, 88, 12, 0.4);
+        }
+        
+        .severity-moderate { 
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%);
+            box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4);
+        }
+        
+        .severity-low { 
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        .disaster-card {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 5px solid transparent;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .disaster-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .disaster-card:hover::before {
+            opacity: 1;
+        }
+        
+        .disaster-card:hover {
+            transform: translateY(-4px) scale(1.01);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        
+        .stats-card {
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stats-card::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .stats-card:hover::after {
+            opacity: 1;
+        }
+        
+        .stats-card:hover {
+            transform: translateY(-5px) scale(1.03);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+            border-color: rgba(255,255,255,0.2);
+        }
+        
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .btn-primary {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .btn-primary:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .btn-primary:active {
+            transform: scale(0.95);
+        }
+        
+        .live-indicator {
+            animation: pulse-alert 2s ease-in-out infinite;
+        }
+        
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+            animation: pulse-alert 1.5s ease-in-out infinite;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #1e293b);
+            background-size: 400% 400%;
+            animation: gradient-shift 15s ease infinite;
+        }
+        
+        .input-focus {
+            transition: all 0.3s ease;
+        }
+        
+        .input-focus:focus {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            outline: none;
+            border: 2px solid rgba(59, 130, 246, 0.5);
+        }
+        
+        .weather-icon {
+            font-size: 2rem;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        
+        .status-badge {
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .real-time-data {
+            border-left: 3px solid #3b82f6;
+            padding-left: 1rem;
+            animation: fade-in 0.5s ease-out;
+        }
+        
+        .scrollbar-custom::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .scrollbar-custom::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+        
+        .scrollbar-custom::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+        
+        .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .tab-button {
+            cursor: pointer;
+        }
+
+        .tab-button.active {
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+
+        .media-preview {
+            max-width: 150px;
+            max-height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+    </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+  <script src="/_sdk/element_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full">
+  <div id="app" class="h-full w-full overflow-auto scrollbar-custom"></div>
+  <script>
+        // Local Storage Keys
+        const STORAGE_KEY = 'disaster_management_data';
+        
+        // App State
+        let disasterRecords = [];
+        let citizenReports = [];
+        let weatherData = {};
+        let systemStatus = { connected: true, lastUpdate: new Date() };
+        let map = null;
+        let markers = [];
+        let alarmsEnabled = true;
+        let alarmAudio = null;
+        let liveFeedItems = [];
+        let filterSettings = { type: 'all', severity: 'all' };
+        let activeTab = 'authority';
+        
+        // Configuration
+        const config = {
+            background_color: "#0f172a",
+            card_color: "#1e293b",
+            text_color: "#f1f5f9",
+            primary_action_color: "#dc2626",
+            secondary_action_color: "#3b82f6",
+            font_family: "Inter",
+            font_size: 16,
+            system_title: "Disaster Management System",
+            organization_name: "Emergency Response Authority",
+            emergency_hotline: "911"
+        };
+
+        // Load data from localStorage
+        function loadData() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    disasterRecords = data.disasterRecords || [];
+                    citizenReports = data.citizenReports || [];
+                }
+            } catch (e) {
+                console.error('Error loading data:', e);
+            }
+        }
+
+        // Save data to localStorage
+        function saveData() {
+            try {
+                const data = {
+                    disasterRecords,
+                    citizenReports
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            } catch (e) {
+                console.error('Error saving data:', e);
+            }
+        }
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        function createDisasterAlert(alertData) {
+            const newAlert = {
+                id: generateId(),
+                disaster_type: alertData.disaster_type,
+                location: alertData.location,
+                severity: alertData.severity,
+                description: alertData.description,
+                safety_guidelines: alertData.safety_guidelines,
+                status: "Active",
+                timestamp: new Date().toISOString(),
+                affected_area: alertData.affected_area,
+                emergency_contacts: alertData.emergency_contacts
+            };
+
+            disasterRecords.push(newAlert);
+            saveData();
+            
+            if (alertData.severity === "Critical" && alarmAudio && alarmsEnabled) {
+                alarmAudio.play();
+            }
+            
+            showNotification(`🚨 ${alertData.disaster_type} alert created successfully`, "success");
+            renderApp();
+            updateMapMarkers();
+        }
+
+        function createCitizenReport(reportData) {
+            const newReport = {
+                id: generateId(),
+                reporter_name: reportData.reporter_name,
+                reporter_contact: reportData.reporter_contact,
+                report_type: reportData.report_type,
+                location: reportData.location,
+                urgency: reportData.urgency,
+                description: reportData.description,
+                media_info: reportData.media_info,
+                verification_status: "Pending",
+                timestamp: new Date().toISOString()
+            };
+
+            citizenReports.push(newReport);
+            saveData();
+            
+            showNotification(`📸 Citizen report submitted successfully! (ID: ${newReport.id.substring(0, 8)})`, "success");
+            renderApp();
+        }
+
+        function verifyCitizenReport(reportId, status) {
+            const report = citizenReports.find(r => r.id === reportId);
+            if (report) {
+                report.verification_status = status;
+                saveData();
+                showNotification(`Report ${status.toLowerCase()} successfully`, "success");
+                renderApp();
+            }
+        }
+
+        function updateAlertStatus(alertId, newStatus) {
+            const alert = disasterRecords.find(r => r.id === alertId);
+            if (alert) {
+                alert.status = newStatus;
+                saveData();
+                showNotification(`Alert status updated to ${newStatus}`, "success");
+                renderApp();
+                updateMapMarkers();
+            }
+        }
+
+        function deleteRecord(recordId) {
+            disasterRecords = disasterRecords.filter(r => r.id !== recordId);
+            citizenReports = citizenReports.filter(r => r.id !== recordId);
+            saveData();
+            showNotification("Record deleted successfully", "success");
+            renderApp();
+            updateMapMarkers();
+        }
+
+        function showNotification(message, type) {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            const icons = { success: '✓', error: '✕', info: 'ℹ' };
+            const colors = { 
+                success: 'linear-gradient(135deg, #10b981, #059669)', 
+                error: 'linear-gradient(135deg, #ef4444, #dc2626)', 
+                info: 'linear-gradient(135deg, #3b82f6, #2563eb)' 
+            };
+            
+            notification.className = 'notification-enter p-4 rounded-lg shadow-2xl mb-3 flex items-center gap-3';
+            notification.style.background = colors[type];
+            notification.style.color = 'white';
+            notification.style.border = '1px solid rgba(255,255,255,0.2)';
+            notification.innerHTML = `
+                <span class="text-xl">${icons[type]}</span>
+                <span class="flex-1">${message}</span>
+            `;
+            
+            container.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => notification.remove(), 300);
+            }, 4000);
+        }
+
+        function getStatsData() {
+            const active = disasterRecords.filter(r => r.status === "Active").length;
+            const resolved = disasterRecords.filter(r => r.status === "Resolved").length;
+            const critical = disasterRecords.filter(r => r.severity === "Critical").length;
+            const totalReports = citizenReports.length;
+            const pendingReports = citizenReports.filter(r => r.verification_status === "Pending").length;
+            
+            return { active, resolved, critical, total: disasterRecords.length, totalReports, pendingReports };
+        }
+
+        function initializeApp() {
+            loadData();
+            initializeAlarmSound();
+            startRealTimeMonitoring();
+            renderApp();
+        }
+        
+        function initializeAlarmSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            alarmAudio = {
+                context: audioContext,
+                isPlaying: false,
+                play: function() {
+                    if (!alarmsEnabled || this.isPlaying) return;
+                    this.isPlaying = true;
+                    this.playSequence(0);
+                },
+                playSequence: function(count) {
+                    if (count >= 4) {
+                        this.isPlaying = false;
+                        return;
+                    }
+                    
+                    const now = this.context.currentTime;
+                    
+                    const osc1 = this.context.createOscillator();
+                    const gain1 = this.context.createGain();
+                    osc1.connect(gain1);
+                    gain1.connect(this.context.destination);
+                    
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(800, now);
+                    
+                    gain1.gain.setValueAtTime(0, now);
+                    gain1.gain.linearRampToValueAtTime(0.3, now + 0.02);
+                    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    
+                    osc1.start(now);
+                    osc1.stop(now + 0.3);
+                    
+                    const osc2 = this.context.createOscillator();
+                    const gain2 = this.context.createGain();
+                    osc2.connect(gain2);
+                    gain2.connect(this.context.destination);
+                    
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(600, now + 0.15);
+                    
+                    gain2.gain.setValueAtTime(0, now + 0.15);
+                    gain2.gain.linearRampToValueAtTime(0.3, now + 0.17);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+                    
+                    osc2.start(now + 0.15);
+                    osc2.stop(now + 0.5);
+                    
+                    setTimeout(() => this.playSequence(count + 1), 700);
+                }
+            };
+        }
+
+        function startRealTimeMonitoring() {
+            setInterval(() => {
+                systemStatus.lastUpdate = new Date();
+                updateSystemStatus();
+            }, 5000);
+            
+            setInterval(() => {
+                addLiveFeedItem();
+            }, 8000);
+            
+            addLiveFeedItem();
+            addLiveFeedItem();
+            addLiveFeedItem();
+        }
+        
+        function addLiveFeedItem() {
+            const feedTypes = [
+                { icon: '🌡️', text: 'Temperature sensor spike detected', location: 'Northern Region', type: 'sensor' },
+                { icon: '🌊', text: 'River water level rising', location: 'Coastal Area', type: 'warning' },
+                { icon: '📡', text: 'Satellite imagery updated', location: 'Global', type: 'info' },
+                { icon: '⚠️', text: 'Seismic activity monitored', location: 'Eastern Zone', type: 'alert' },
+                { icon: '🚁', text: 'Rescue team deployed', location: 'Disaster Zone', type: 'action' },
+                { icon: '📱', text: 'Emergency broadcast sent', location: 'Multiple Areas', type: 'notification' },
+                { icon: '🏥', text: 'Medical supplies dispatched', location: 'Relief Center', type: 'action' },
+                { icon: '💨', text: 'Wind speed increasing', location: 'Metropolitan Area', type: 'warning' },
+                { icon: '⛑️', text: 'Evacuation completed', location: 'Risk Zone A', type: 'success' },
+                { icon: '📊', text: 'Damage assessment in progress', location: 'Affected Region', type: 'info' }
+            ];
+            
+            const item = feedTypes[Math.floor(Math.random() * feedTypes.length)];
+            const feedItem = {
+                id: Date.now() + Math.random(),
+                ...item,
+                timestamp: new Date()
+            };
+            
+            liveFeedItems.unshift(feedItem);
+            
+            if (liveFeedItems.length > 20) {
+                liveFeedItems.pop();
+            }
+            
+            updateLiveFeed();
+        }
+        
+        function updateLiveFeed() {
+            const feedContainer = document.getElementById('live-feed');
+            if (!feedContainer) return;
+            
+            const baseFont = config.font_size;
+            const customFont = config.font_family;
+            const fontStack = `${customFont}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+            
+            const typeColors = {
+                sensor: 'rgba(59, 130, 246, 0.2)',
+                warning: 'rgba(245, 158, 11, 0.2)',
+                alert: 'rgba(239, 68, 68, 0.2)',
+                action: 'rgba(16, 185, 129, 0.2)',
+                notification: 'rgba(139, 92, 246, 0.2)',
+                success: 'rgba(34, 197, 94, 0.2)',
+                info: 'rgba(100, 116, 139, 0.2)'
+            };
+            
+            feedContainer.innerHTML = liveFeedItems.map(item => {
+                const timeAgo = Math.floor((new Date() - item.timestamp) / 1000);
+                const timeText = timeAgo < 60 ? `${timeAgo}s ago` : `${Math.floor(timeAgo / 60)}m ago`;
+                
+                return `
+                    <div class="p-3 rounded-lg fade-in" style="background-color: ${typeColors[item.type]}; border-left: 3px solid rgba(255,255,255,0.3);">
+                        <div class="flex items-start gap-2">
+                            <span class="text-lg">${item.icon}</span>
+                            <div class="flex-1">
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="font-semibold mb-1">${item.text}</div>
+                                <div class="flex items-center gap-2 opacity-60" style="font-size: ${baseFont * 0.7}px; font-family: ${fontStack};">
+                                    <span>📍 ${item.location}</span>
+                                    <span>•</span>
+                                    <span>${timeText}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateSystemStatus() {
+            const statusElement = document.getElementById('system-status');
+            if (statusElement) {
+                const timeSince = Math.floor((new Date() - systemStatus.lastUpdate) / 1000);
+                statusElement.querySelector('.status-text').textContent = `Updated ${timeSince}s ago`;
+            }
+        }
+
+        function renderApp() {
+            const app = document.getElementById('app');
+            const stats = getStatsData();
+            
+            const baseFont = config.font_size;
+            const customFont = config.font_family;
+            const fontStack = `${customFont}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+            
+            app.className = 'h-full w-full overflow-auto scrollbar-custom gradient-bg';
+            app.style.color = config.text_color;
+            app.style.fontFamily = fontStack;
+            
+            app.innerHTML = `
+                <div class="min-h-full w-full p-6">
+                    <!-- Header with Live Status -->
+                    <header class="mb-8 glassmorphism p-6 rounded-xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-4">
+                                <div>
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <h1 style="font-size: ${baseFont * 2.5}px; font-family: ${fontStack};" class="font-bold">
+                                            ${config.system_title}
+                                        </h1>
+                                        <div class="flex items-center gap-2 live-indicator">
+                                            <div class="live-dot"></div>
+                                            <span style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack}; color: #ef4444;" class="font-semibold">LIVE</span>
+                                        </div>
+                                        <button id="alarm-toggle" class="btn-primary px-4 py-2 rounded-lg font-semibold transition-all shadow-lg" style="background-color: ${config.secondary_action_color}; color: white; font-size: ${baseFont * 0.85}px; font-family: ${fontStack};">
+                                            🔔 Alarms: ON
+                                        </button>
+                                    </div>
+                                    <p style="font-size: ${baseFont}px; font-family: ${fontStack};" class="opacity-80">
+                                        ${config.organization_name} • Local Version (Data stored in browser)
+                                    </p>
+                                    <div id="system-status" class="mt-2 flex items-center gap-2" style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};">
+                                        <span class="status-text opacity-60">Connected to monitoring network</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm opacity-80 mb-1" style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};">🚨 Emergency Hotline</div>
+                                <div class="text-4xl font-bold" style="font-size: ${baseFont * 2}px; font-family: ${fontStack}; color: ${config.primary_action_color}">
+                                    ${config.emergency_hotline}
+                                </div>
+                                <div class="mt-2 text-xs opacity-60" style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};">24/7 Available</div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <!-- Real-Time Statistics Dashboard -->
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+                        <div class="stats-card p-6 rounded-xl fade-in" style="animation-delay: 0.1s;">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="weather-icon">⚠️</div>
+                                <div class="status-badge px-3 py-1 rounded-full text-xs font-bold" style="background: ${config.primary_action_color}; color: white;">
+                                    ACTIVE
+                                </div>
+                            </div>
+                            <div class="text-4xl font-bold mb-2" style="font-size: ${baseFont * 2.5}px; font-family: ${fontStack}; color: ${config.primary_action_color}">
+                                ${stats.active}
+                            </div>
+                            <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="opacity-80 font-semibold">Active Alerts</div>
+                            <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 mt-1">Requires immediate attention</div>
+                        </div>
+                        
+                        <div class="stats-card p-6 rounded-xl fade-in" style="animation-delay: 0.2s;">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="weather-icon">🔥</div>
+                                <div class="status-badge px-3 py-1 rounded-full text-xs font-bold" style="background: #991b1b; color: white;">
+                                    CRITICAL
+                                </div>
+                            </div>
+                            <div class="text-4xl font-bold mb-2" style="font-size: ${baseFont * 2.5}px; font-family: ${fontStack}; color: #ef4444;">
+                                ${stats.critical}
+                            </div>
+                            <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="opacity-80 font-semibold">Critical Events</div>
+                            <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 mt-1">Maximum severity level</div>
+                        </div>
+                        
+                        <div class="stats-card p-6 rounded-xl fade-in" style="animation-delay: 0.3s;">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="weather-icon">✅</div>
+                                <div class="status-badge px-3 py-1 rounded-full text-xs font-bold" style="background: ${config.secondary_action_color}; color: white;">
+                                    RESOLVED
+                                </div>
+                            </div>
+                            <div class="text-4xl font-bold mb-2" style="font-size: ${baseFont * 2.5}px; font-family: ${fontStack}; color: ${config.secondary_action_color}">
+                                ${stats.resolved}
+                            </div>
+                            <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="opacity-80 font-semibold">Resolved</div>
+                            <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 mt-1">Successfully handled</div>
+                        </div>
+
+                        <div class="stats-card p-6 rounded-xl fade-in" style="animation-delay: 0.35s;">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="weather-icon">📸</div>
+                                <div class="status-badge px-3 py-1 rounded-full text-xs font-bold" style="background: #7c3aed; color: white;">
+                                    REPORTS
+                                </div>
+                            </div>
+                            <div class="text-4xl font-bold mb-2" style="font-size: ${baseFont * 2.5}px; font-family: ${fontStack}; color: #a855f7;">
+                                ${stats.totalReports}
+                            </div>
+                            <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="opacity-80 font-semibold">Citizen Reports</div>
+                            <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 mt-1">${stats.pendingReports} pending verification</div>
+                        </div>
+                        
+                        <div class="stats-card p-6 rounded-xl fade-in" style="animation-delay: 0.4s;">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="weather-icon">📊</div>
+                            </div>
+                            <div class="text-4xl font-bold mb-2" style="font-size: ${baseFont * 2.5}px; font-family: ${fontStack};">
+                                ${stats.total}
+                            </div>
+                            <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="opacity-80 font-semibold">Total Incidents</div>
+                            <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 mt-1">All-time recorded</div>
+                        </div>
+                    </div>
+
+                    <!-- Two Column Layout -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                        <!-- Alert Creation Form with Tabs -->
+                        <div class="lg:col-span-2 glassmorphism p-6 rounded-xl fade-in" style="animation-delay: 0.5s;">
+                            <!-- Tab Navigation -->
+                            <div class="flex gap-2 mb-6">
+                                <button id="authority-tab" class="tab-button flex-1 px-6 py-3 rounded-lg font-bold transition-all" onclick="switchTab('authority')" style="background-color: ${activeTab === 'authority' ? config.primary_action_color : 'rgba(255,255,255,0.1)'}; color: ${activeTab === 'authority' ? 'white' : config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack};">
+                                    🚨 Authority Alert
+                                </button>
+                                <button id="citizen-tab" class="tab-button flex-1 px-6 py-3 rounded-lg font-bold transition-all" onclick="switchTab('citizen')" style="background-color: ${activeTab === 'citizen' ? config.primary_action_color : 'rgba(255,255,255,0.1)'}; color: ${activeTab === 'citizen' ? 'white' : config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack};">
+                                    📸 Citizen Report
+                                </button>
+                            </div>
+
+                            <!-- Authority Alert Form -->
+                            <div id="authority-form-container" style="display: ${activeTab === 'authority' ? 'block' : 'none'};">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <span class="text-3xl">🚨</span>
+                                    <h2 style="font-size: ${baseFont * 1.75}px; font-family: ${fontStack};" class="font-bold">Create Official Alert</h2>
+                                </div>
+                                <form id="alert-form" class="space-y-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="disaster-type" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Disaster Type</label>
+                                            <select id="disaster-type" required class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                                <option value="">Select Type</option>
+                                                <option value="Flood">🌊 Flood</option>
+                                                <option value="Earthquake">🌍 Earthquake</option>
+                                                <option value="Cyclone">🌀 Cyclone</option>
+                                                <option value="Fire">🔥 Fire</option>
+                                                <option value="Tsunami">🌊 Tsunami</option>
+                                                <option value="Landslide">⛰️ Landslide</option>
+                                                <option value="Hurricane">🌪️ Hurricane</option>
+                                                <option value="Tornado">🌪️ Tornado</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="severity" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Severity Level</label>
+                                            <select id="severity" required class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                                <option value="">Select Severity</option>
+                                                <option value="Critical">🔴 Critical</option>
+                                                <option value="High">🟠 High</option>
+                                                <option value="Moderate">🟡 Moderate</option>
+                                                <option value="Low">🔵 Low</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="location" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Location</label>
+                                            <input type="text" id="location" required placeholder="City, State, Country" class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="affected-area" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Affected Area</label>
+                                            <input type="text" id="affected-area" required placeholder="e.g., 50 km² or 500 people" class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="description" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Description</label>
+                                        <textarea id="description" required rows="3" placeholder="Detailed description of the disaster situation..." class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);"></textarea>
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="safety-guidelines" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Safety Guidelines</label>
+                                        <textarea id="safety-guidelines" required rows="3" placeholder="Evacuation routes, safety measures, do's and don'ts..." class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);"></textarea>
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="emergency-contacts" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Emergency Contacts</label>
+                                        <input type="text" id="emergency-contacts" required placeholder="Contact numbers separated by commas" class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                    </div>
+                                    
+                                    <button type="submit" id="submit-btn" class="btn-primary w-full px-6 py-4 rounded-lg font-bold transition-all shadow-lg" style="background-color: ${config.primary_action_color}; color: white; font-size: ${baseFont * 1.1}px; font-family: ${fontStack};">
+                                        🚨 Create & Broadcast Alert
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Citizen Report Form -->
+                            <div id="citizen-form-container" style="display: ${activeTab === 'citizen' ? 'block' : 'none'};">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <span class="text-3xl">📸</span>
+                                    <h2 style="font-size: ${baseFont * 1.75}px; font-family: ${fontStack};" class="font-bold">Submit Citizen Report</h2>
+                                </div>
+                                <form id="citizen-form" class="space-y-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="reporter-name" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Your Name</label>
+                                            <input type="text" id="reporter-name" required placeholder="Enter your full name" class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="reporter-contact" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Contact Number</label>
+                                            <input type="tel" id="reporter-contact" required placeholder="Your phone number" class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="report-type" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Report Type</label>
+                                            <select id="report-type" required class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                                <option value="">Select Type</option>
+                                                <option value="Flooding">🌊 Flooding</option>
+                                                <option value="Fire">🔥 Fire</option>
+                                                <option value="Structural Damage">🏚️ Structural Damage</option>
+                                                <option value="Road Blockage">🚧 Road Blockage</option>
+                                                <option value="Power Outage">⚡ Power Outage</option>
+                                                <option value="Injured/Missing Persons">🆘 Injured/Missing Persons</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="urgency" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Urgency Level</label>
+                                            <select id="urgency" required class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                                <option value="">Select Urgency</option>
+                                                <option value="Critical">🔴 Critical</option>
+                                                <option value="High">🟠 High</option>
+                                                <option value="Medium">🟡 Medium</option>
+                                                <option value="Low">🔵 Low</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="md:col-span-2">
+                                            <label for="report-location" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Location</label>
+                                            <input type="text" id="report-location" required placeholder="Exact location or landmark" class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="report-description" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">Description</label>
+                                        <textarea id="report-description" required rows="3" placeholder="Describe what you're witnessing..." class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);"></textarea>
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="media-upload" style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="block mb-2 font-semibold">📷 Upload Photos/Videos</label>
+                                        <input type="file" id="media-upload" multiple accept="image/*,video/*" class="w-full p-3 rounded-lg input-focus" style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFont}px; font-family: ${fontStack}; border: 2px solid rgba(255,255,255,0.1);">
+                                        <div id="media-preview" class="mt-3 flex flex-wrap gap-3"></div>
+                                    </div>
+                                    
+                                    <button type="submit" id="citizen-submit-btn" class="btn-primary w-full px-6 py-4 rounded-lg font-bold transition-all shadow-lg" style="background-color: ${config.secondary_action_color}; color: white; font-size: ${baseFont * 1.1}px; font-family: ${fontStack};">
+                                        📸 Submit Report
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Quick Info Panel -->
+                        <div class="space-y-6">
+                            <div class="glassmorphism p-6 rounded-xl fade-in" style="animation-delay: 0.6s;">
+                                <h3 style="font-size: ${baseFont * 1.25}px; font-family: ${fontStack};" class="font-bold mb-4">📡 System Status</h3>
+                                <div class="space-y-3 real-time-data">
+                                    <div class="flex justify-between items-center p-3 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                        <span style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-80">Storage</span>
+                                        <span style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack}; color: #10b981;" class="font-bold">● LocalStorage</span>
+                                    </div>
+                                    <div class="flex justify-between items-center p-3 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                        <span style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-80">Map System</span>
+                                        <span style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack}; color: #10b981;" class="font-bold">● Active</span>
+                                    </div>
+                                    <div class="flex justify-between items-center p-3 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                        <span style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-80">Live Feed</span>
+                                        <span style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack}; color: #10b981;" class="font-bold">● Running</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="glassmorphism p-6 rounded-xl fade-in" style="animation-delay: 0.7s;">
+                                <h3 style="font-size: ${baseFont * 1.25}px; font-family: ${fontStack};" class="font-bold mb-4">🗺️ Interactive Map</h3>
+                                <div id="map-container" class="rounded-lg overflow-hidden" style="height: 300px; position: relative;">
+                                    <div id="map" style="width: 100%; height: 100%;"></div>
+                                </div>
+                                <div class="mt-3 text-sm opacity-60 text-center" style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};">
+                                    Tracking ${stats.active} active disaster zones
+                                </div>
+                            </div>
+
+                            <div class="glassmorphism p-6 rounded-xl fade-in" style="animation-delay: 0.8s;">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 style="font-size: ${baseFont * 1.25}px; font-family: ${fontStack};" class="font-bold">🔴 Live Incident Feed</h3>
+                                    <div class="live-indicator flex items-center gap-2">
+                                        <div class="live-dot"></div>
+                                        <span style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack}; color: #ef4444;" class="font-bold">LIVE</span>
+                                    </div>
+                                </div>
+                                <div id="live-feed" class="space-y-2 max-h-80 overflow-y-auto scrollbar-custom"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Alerts -->
+                    <div class="mb-8">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center gap-3">
+                                <span class="text-3xl">⚡</span>
+                                <h2 style="font-size: ${baseFont * 1.75}px; font-family: ${fontStack};" class="font-bold">Active Disaster Alerts</h2>
+                                ${stats.active > 0 ? `<span class="live-indicator px-3 py-1 rounded-full text-sm font-bold" style="background: ${config.primary_action_color}; color: white;">${stats.active} ACTIVE</span>` : ''}
+                            </div>
+                        </div>
+                        <div id="active-alerts" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+                    </div>
+
+                    <!-- Citizen Reports Section -->
+                    <div class="mb-8">
+                        <div class="flex items-center gap-3 mb-6">
+                            <span class="text-3xl">📸</span>
+                            <h2 style="font-size: ${baseFont * 1.75}px; font-family: ${fontStack};" class="font-bold">Citizen Reports</h2>
+                            ${stats.pendingReports > 0 ? `<span class="px-3 py-1 rounded-full text-sm font-bold" style="background: #f59e0b; color: white;">${stats.pendingReports} PENDING</span>` : ''}
+                        </div>
+                        <div id="citizen-reports" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+                    </div>
+
+                    <!-- Resolved Alerts -->
+                    <div>
+                        <div class="flex items-center gap-3 mb-6">
+                            <span class="text-3xl">✅</span>
+                            <h2 style="font-size: ${baseFont * 1.75}px; font-family: ${fontStack};" class="font-bold">Resolved Incidents</h2>
+                        </div>
+                        <div id="resolved-alerts" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+                    </div>
+
+                    <!-- Notification Container -->
+                    <div id="notification-container" class="fixed top-6 right-6 z-50 max-w-md"></div>
+                </div>
+            `;
+
+            setupEventListeners();
+            renderAlerts();
+            renderCitizenReports();
+        }
+
+        window.switchTab = function(tab) {
+            activeTab = tab;
+            renderApp();
+        };
+
+        function setupEventListeners() {
+            const form = document.getElementById('alert-form');
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                const alertData = {
+                    disaster_type: document.getElementById('disaster-type').value,
+                    severity: document.getElementById('severity').value,
+                    location: document.getElementById('location').value,
+                    affected_area: document.getElementById('affected-area').value,
+                    description: document.getElementById('description').value,
+                    safety_guidelines: document.getElementById('safety-guidelines').value,
+                    emergency_contacts: document.getElementById('emergency-contacts').value
+                };
+                
+                createDisasterAlert(alertData);
+                form.reset();
+            });
+
+            const citizenForm = document.getElementById('citizen-form');
+            citizenForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                const mediaFiles = document.getElementById('media-upload').files;
+                let mediaInfo = 'No media uploaded';
+                if (mediaFiles.length > 0) {
+                    const fileNames = Array.from(mediaFiles).map(f => f.name).join(', ');
+                    mediaInfo = `${mediaFiles.length} file(s): ${fileNames}`;
+                }
+                
+                const reportData = {
+                    reporter_name: document.getElementById('reporter-name').value,
+                    reporter_contact: document.getElementById('reporter-contact').value,
+                    report_type: document.getElementById('report-type').value,
+                    location: document.getElementById('report-location').value,
+                    urgency: document.getElementById('urgency').value,
+                    description: document.getElementById('report-description').value,
+                    media_info: mediaInfo
+                };
+                
+                createCitizenReport(reportData);
+                
+                citizenForm.reset();
+                document.getElementById('media-preview').innerHTML = '';
+            });
+
+            const mediaUpload = document.getElementById('media-upload');
+            mediaUpload.addEventListener('change', (e) => {
+                const preview = document.getElementById('media-preview');
+                preview.innerHTML = '';
+                
+                const files = Array.from(e.target.files);
+                files.forEach(file => {
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const img = document.createElement('img');
+                            img.src = e.target.result;
+                            img.className = 'media-preview';
+                            preview.appendChild(img);
+                        };
+                        reader.readAsDataURL(file);
+                    } else if (file.type.startsWith('video/')) {
+                        const video = document.createElement('video');
+                        video.src = URL.createObjectURL(file);
+                        video.className = 'media-preview';
+                        video.controls = true;
+                        preview.appendChild(video);
+                    }
+                });
+            });
+            
+            const alarmToggle = document.getElementById('alarm-toggle');
+            if (alarmToggle) {
+                alarmToggle.addEventListener('click', () => {
+                    alarmsEnabled = !alarmsEnabled;
+                    alarmToggle.innerHTML = alarmsEnabled ? '🔔 Alarms: ON' : '🔕 Alarms: OFF';
+                    alarmToggle.style.backgroundColor = alarmsEnabled ? config.secondary_action_color : '#64748b';
+                });
+            }
+            
+            initializeMap();
+        }
+        
+        function initializeMap() {
+            if (!document.getElementById('map')) return;
+            
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+            
+            updateMapMarkers();
+        }
+        
+        function geocodeLocation(location) {
+            const locations = {
+                'mumbai': [19.0760, 72.8777],
+                'delhi': [28.7041, 77.1025],
+                'bangalore': [12.9716, 77.5946],
+                'chennai': [13.0827, 80.2707],
+                'kolkata': [22.5726, 88.3639],
+                'hyderabad': [17.3850, 78.4867],
+                'pune': [18.5204, 73.8567],
+                'ahmedabad': [23.0225, 72.5714],
+                'jaipur': [26.9124, 75.7873],
+                'new york': [40.7128, -74.0060],
+                'london': [51.5074, -0.1278],
+                'tokyo': [35.6762, 139.6503],
+                'paris': [48.8566, 2.3522],
+                'sydney': [-33.8688, 151.2093],
+                'default': [20.5937, 78.9629]
+            };
+            
+            const key = location.toLowerCase().split(',')[0].trim();
+            return locations[key] || locations['default'];
+        }
+        
+        function updateMapMarkers() {
+            if (!map) return;
+            
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            
+            const activeAlerts = disasterRecords.filter(r => r.status === "Active");
+            
+            activeAlerts.forEach(alert => {
+                const coords = geocodeLocation(alert.location);
+                
+                const severityColors = {
+                    'Critical': '#dc2626',
+                    'High': '#ea580c',
+                    'Moderate': '#f59e0b',
+                    'Low': '#3b82f6'
+                };
+                
+                const iconHtml = `
+                    <div style="
+                        background-color: ${severityColors[alert.severity]};
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 50%;
+                        border: 3px solid white;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 16px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                        animation: pulse-alert 2s infinite;
+                    ">⚠️</div>
+                `;
+                
+                const customIcon = L.divIcon({
+                    html: iconHtml,
+                    className: 'custom-marker',
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+                
+                const marker = L.marker(coords, { icon: customIcon })
+                    .bindPopup(`
+                        <div style="min-width: 200px;">
+                            <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">${alert.disaster_type}</h3>
+                            <p style="margin: 4px 0;"><strong>Location:</strong> ${alert.location}</p>
+                            <p style="margin: 4px 0;"><strong>Severity:</strong> <span style="color: ${severityColors[alert.severity]}; font-weight: bold;">${alert.severity}</span></p>
+                            <p style="margin: 4px 0;"><strong>Affected:</strong> ${alert.affected_area}</p>
+                            <p style="margin: 8px 0 0 0; font-size: 14px;">${alert.description}</p>
+                        </div>
+                    `)
+                    .addTo(map);
+                
+                markers.push(marker);
+            });
+            
+            if (markers.length > 0) {
+                const group = L.featureGroup(markers);
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+
+        function renderAlerts() {
+            const activeAlerts = disasterRecords.filter(r => r.status === "Active");
+            const resolvedAlerts = disasterRecords.filter(r => r.status === "Resolved");
+            
+            renderAlertList('active-alerts', activeAlerts, true);
+            renderAlertList('resolved-alerts', resolvedAlerts, false);
+        }
+
+        function renderCitizenReports() {
+            const container = document.getElementById('citizen-reports');
+            const baseFont = config.font_size;
+            const customFont = config.font_family;
+            const fontStack = `${customFont}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+            
+            if (citizenReports.length === 0) {
+                container.innerHTML = `<div class="lg:col-span-2 glassmorphism p-8 rounded-xl text-center opacity-60" style="font-size: ${baseFont}px; font-family: ${fontStack};">
+                    <div class="text-5xl mb-4">📸</div>
+                    <div>No citizen reports submitted yet</div>
+                </div>`;
+                return;
+            }
+            
+            container.innerHTML = citizenReports.map((report, index) => {
+                const date = new Date(report.timestamp);
+                const urgencyColors = { 
+                    Critical: '#dc2626', 
+                    High: '#ea580c', 
+                    Medium: '#f59e0b', 
+                    Low: '#3b82f6' 
+                };
+                const statusColors = {
+                    Pending: '#f59e0b',
+                    Verified: '#10b981',
+                    Rejected: '#ef4444'
+                };
+                const reportIcons = { 
+                    Flooding: '🌊', 
+                    Fire: '🔥', 
+                    'Structural Damage': '🏚️',
+                    'Road Blockage': '🚧',
+                    'Power Outage': '⚡',
+                    'Injured/Missing Persons': '🆘'
+                };
+                
+                return `
+                    <div class="disaster-card glassmorphism p-6 rounded-xl fade-in" style="animation-delay: ${index * 0.1}s; border-left: 5px solid ${statusColors[report.verification_status]};">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3 mb-3">
+                                    <span class="text-4xl">${reportIcons[report.report_type] || '📸'}</span>
+                                    <div>
+                                        <h3 style="font-size: ${baseFont * 1.5}px; font-family: ${fontStack};" class="font-bold mb-1">${report.report_type}</h3>
+                                        <div class="flex items-center gap-2">
+                                            <span class="px-3 py-1 rounded-full text-sm font-bold" style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack}; background-color: ${urgencyColors[report.urgency]}; color: white;">
+                                                ${report.urgency}
+                                            </span>
+                                            <span class="status-badge px-3 py-1 rounded-full text-xs font-bold" style="background: ${statusColors[report.verification_status]}; color: white;">
+                                                ${report.verification_status.toUpperCase()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="opacity-90 mb-2 flex items-center gap-2">
+                                    <span>📍</span>
+                                    <span class="font-semibold">${report.location}</span>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 flex items-center gap-2">
+                                    <span>🕐</span>
+                                    <span>${date.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-4 mb-5">
+                            <div class="p-4 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="font-semibold mb-2 flex items-center gap-2">
+                                    <span>👤</span>
+                                    <span>Reporter Information</span>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-80">
+                                    <div><strong>Name:</strong> ${report.reporter_name}</div>
+                                    <div><strong>Contact:</strong> ${report.reporter_contact}</div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="font-semibold mb-2 flex items-center gap-2">
+                                    <span>📝</span>
+                                    <span>Description</span>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-80 leading-relaxed">${report.description}</div>
+                            </div>
+                            
+                            <div class="p-4 rounded-lg" style="background-color: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3);">
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="font-semibold mb-2 flex items-center gap-2">
+                                    <span>📷</span>
+                                    <span>Media Attachments</span>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-90">${report.media_info}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-3">
+                            ${report.verification_status === 'Pending' ? `
+                                <button onclick="handleVerifyCitizenReport('${report.id}', 'Verified')" class="btn-primary flex-1 px-4 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl" style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-size: ${baseFont * 0.9}px; font-family: ${fontStack};">
+                                    ✅ Verify Report
+                                </button>
+                                <button onclick="handleVerifyCitizenReport('${report.id}', 'Rejected')" class="btn-primary flex-1 px-4 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; font-size: ${baseFont * 0.9}px; font-family: ${fontStack};">
+                                    ❌ Reject
+                                </button>
+                            ` : ''}
+                            <button onclick="handleDeleteRecord('${report.id}')" class="btn-primary px-4 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl" style="background: linear-gradient(135deg, #64748b, #475569); color: white; font-size: ${baseFont * 0.9}px; font-family: ${fontStack};">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderAlertList(containerId, alerts, isActive) {
+            const container = document.getElementById(containerId);
+            const baseFont = config.font_size;
+            const customFont = config.font_family;
+            const fontStack = `${customFont}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+            
+            if (alerts.length === 0) {
+                container.innerHTML = `<div class="lg:col-span-2 glassmorphism p-8 rounded-xl text-center opacity-60" style="font-size: ${baseFont}px; font-family: ${fontStack};">
+                    <div class="text-5xl mb-4">${isActive ? '✅' : '📋'}</div>
+                    <div>No ${isActive ? 'active alerts' : 'resolved incidents'} at this time</div>
+                </div>`;
+                return;
+            }
+            
+            container.innerHTML = alerts.map((alert, index) => {
+                const date = new Date(alert.timestamp);
+                const severityClass = `severity-${alert.severity.toLowerCase()}`;
+                const severityIcons = { Critical: '🔴', High: '🟠', Moderate: '🟡', Low: '🔵' };
+                const disasterIcons = { 
+                    Flood: '🌊', Earthquake: '🌍', Cyclone: '🌀', 
+                    Fire: '🔥', Tsunami: '🌊', Landslide: '⛰️',
+                    Hurricane: '🌪️', Tornado: '🌪️'
+                };
+                
+                return `
+                    <div class="disaster-card glassmorphism p-6 rounded-xl ${isActive ? 'alert-pulse' : ''} fade-in" style="animation-delay: ${index * 0.1}s; border-left: 5px solid ${isActive ? config.primary_action_color : config.secondary_action_color};">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3 mb-3">
+                                    <span class="text-4xl">${disasterIcons[alert.disaster_type] || '⚠️'}</span>
+                                    <div>
+                                        <h3 style="font-size: ${baseFont * 1.5}px; font-family: ${fontStack};" class="font-bold mb-1">${alert.disaster_type}</h3>
+                                        <div class="flex items-center gap-2">
+                                            <span class="${severityClass} px-3 py-1 rounded-full text-sm font-bold" style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack}; color: white;">
+                                                ${severityIcons[alert.severity]} ${alert.severity}
+                                            </span>
+                                            ${isActive ? `<span class="status-badge px-3 py-1 rounded-full text-xs font-bold" style="background: ${config.primary_action_color}; color: white;">ACTIVE</span>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="opacity-90 mb-2 flex items-center gap-2">
+                                    <span>📍</span>
+                                    <span class="font-semibold">${alert.location}</span>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 flex items-center gap-2">
+                                    <span>🕐</span>
+                                    <span>${date.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-4 mb-5">
+                            <div class="p-4 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="font-semibold mb-2 flex items-center gap-2">
+                                    <span>📄</span>
+                                    <span>Description</span>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-80 leading-relaxed">${alert.description}</div>
+                            </div>
+                            
+                            <div class="p-4 rounded-lg" style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3);">
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="font-semibold mb-2 flex items-center gap-2">
+                                    <span>🛡️</span>
+                                    <span>Safety Guidelines</span>
+                                </div>
+                                <div style="font-size: ${baseFont * 0.85}px; font-family: ${fontStack};" class="opacity-90 leading-relaxed">${alert.safety_guidelines}</div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="p-3 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                    <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 mb-1">🗺️ Affected Area</div>
+                                    <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="font-bold">${alert.affected_area}</div>
+                                </div>
+                                <div class="p-3 rounded-lg" style="background-color: rgba(255,255,255,0.05);">
+                                    <div style="font-size: ${baseFont * 0.75}px; font-family: ${fontStack};" class="opacity-60 mb-1">📞 Emergency</div>
+                                    <div style="font-size: ${baseFont * 0.9}px; font-family: ${fontStack};" class="font-bold">${alert.emergency_contacts}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-3">
+                            ${isActive ? `
+                                <button onclick="handleResolveAlert('${alert.id}')" class="btn-primary flex-1 px-4 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl" style="background-color: ${config.secondary_action_color}; color: white; font-size: ${baseFont * 0.9}px; font-family: ${fontStack};">
+                                    ✅ Mark Resolved
+                                </button>
+                            ` : ''}
+                            <button onclick="handleDeleteRecord('${alert.id}')" class="btn-primary px-4 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl" style="background: linear-gradient(135deg, #64748b, #475569); color: white; font-size: ${baseFont * 0.9}px; font-family: ${fontStack};">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.handleResolveAlert = function(alertId) {
+            updateAlertStatus(alertId, "Resolved");
+        };
+
+        window.handleDeleteRecord = function(recordId) {
+            deleteRecord(recordId);
+        };
+
+        window.handleVerifyCitizenReport = function(reportId, status) {
+            verifyCitizenReport(reportId, status);
+        };
+
+        // Initialize app when page loads
+        window.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b8a3cc7238a7f8b',t:'MTc2NzUyNDQ4MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
